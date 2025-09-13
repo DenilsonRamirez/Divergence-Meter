@@ -1,0 +1,24 @@
+{
+  "showAMPM": {
+    "text": "Show AM/PM Indicator",
+    "type": "checkbox", 
+    "value": false
+  },
+  "bgColor": {
+    "text": "Background Color",
+    "type": "color",
+    "value": "#000000"
+  },
+  "imgSelect": {
+    "type": "folderDropdown",
+    "value": "bg.png",
+    "text": "Image",
+    "filter": "*.jpg|*.png|*.gif",
+    "folder": "images"
+  },
+  "imageChk": {
+    "text": "Use Background Image",
+    "type": "checkbox",
+    "value": false
+  }
+}

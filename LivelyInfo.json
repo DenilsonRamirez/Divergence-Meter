@@ -1,0 +1,11 @@
+{
+  "AppVersion": "4.0",
+  "Title": "Steins Gate",
+  "Thumbnail": "final.png",
+  "Desc": "Steins Gate Clock",
+  "Author": "Pit!",
+  "License": "GNU",
+  "Type": 1,
+  "FileName": "index.html",
+  "IsAbsolutePath": false
+}

@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Clock - Lively Wallpaper</title>
+    <style>
+        * {margin:0;padding:0;box-sizing:border-box;}
+        body {
+            width:100vw;height:100vh;background:#000;background-size:cover;
+            background-position:center;background-repeat:no-repeat;overflow:hidden;
+            font-family:Arial,sans-serif;
+        }
+        .clock-container {
+            position:absolute;top:50%;left:50%;
+            transform:translate(-50%,-50%);
+            display:flex;align-items:center;justify-content:center;gap:20px;
+        }
+        .digit-image, .separator, .ampm-indicator {
+            width:120px;height:auto;max-height:200px;
+            object-fit:contain;transition:opacity 0.2s ease;
+        }
+        .digit-fallback {
+            width:120px;height:200px;background:rgba(255,255,255,0.1);
+            border:2px solid rgba(255,255,255,0.3);border-radius:10px;
+            display:flex;align-items:center;justify-content:center;
+            font-size:80px;color:#00ff00;font-weight:bold;text-shadow:0 0 20px #00ff00;
+        }
+        .loading {position:absolute;top:20px;left:20px;color:rgba(255,255,255,0.7);font-size:14px;}
+    </style>
+</head>
+<body>
+    <div class="loading" id="loading">Cargando reloj...</div>
+    
+    <div class="clock-container" id="clockContainer"></div>
+
+    <script>
+        class ImageClock {
+            constructor() {
+                this.container = document.getElementById('clockContainer');
+                this.loading = document.getElementById('loading');
+                this.bgColor = "#000000";
+                this.bgImage = 'none';
+                this.imgChecked = false;
+                this.imagesLoaded = false;
+                this.imageCache = {};
+                this.showAMPM = false;
+
+                this.initializeClock();
+                this.preloadImages();
+                this.startClock();
+            }
+
+            initializeClock() {
+                this.container.innerHTML = '';
+                // Indicador AM/PM (posición inicial)
+                const ampm = document.createElement('img');
+                ampm.className = 'ampm-indicator';
+                ampm.style.opacity = '0';
+                this.container.appendChild(ampm);
+
+                // 8 elementos para HH:MM:SS
+                for (let i = 0; i < 8; i++) {
+                    const img = document.createElement('img');
+                    img.className = i === 2 || i === 5 ? 'separator' : 'digit-image';
+                    img.style.opacity = '0';
+                    this.container.appendChild(img);
+                }
+            }
+
+            preloadImages() {
+                const imageNames = ['0','1','2','3','4','5','6','7','8','9','blank','period'];
+                let loadedCount = 0, totalImages = imageNames.length;
+
+                imageNames.forEach(name => {
+                    const img = new Image();
+                    img.onload = () => {
+                        this.imageCache[name] = img.src;
+                        if (++loadedCount === totalImages) {
+                            this.imagesLoaded = true;
+                            this.loading.style.display = 'none';
+                            this.updateDisplay();
+                        }
+                    };
+                    img.onerror = () => {
+                        console.warn(`No se pudo cargar la imagen: pics/${name}.png`);
+                        if (++loadedCount === totalImages) {
+                            this.imagesLoaded = true;
+                            this.loading.style.display = 'none';
+                            this.updateDisplay();
+                        }
+                    };
+                    img.src = `pics/${name}.png`;
+                });
+            }
+
+            formatTime() {
+				const now = new Date();
+				let hours = now.getHours();
+    			const minutes = now.getMinutes();
+    			const seconds = now.getSeconds();
+
+    			let isPM = hours >= 12;
+
+    			if (this.showAMPM) {
+        			// Conversión a 12h
+        			hours = hours % 12;
+        			if (hours === 0) hours = 12;
+    			}
+
+    			const pics = [];
+    			if (hours < 10) pics.push('blank');
+    			pics.push(...hours.toString().split(''));
+
+    			pics.push('period');
+    			if (minutes < 10) pics.push('blank');
+    			pics.push(...minutes.toString().split(''));
+
+    			pics.push('period');
+    			if (seconds < 10) pics.push('blank');
+    			pics.push(...seconds.toString().split(''));
+
+    			return { pics, isPM };
+			}
+
+            // Función auxiliar para convertir un valor a número o mantener como string
+            charToNumber(char) {
+                if (char === 'blank') return -1; // Usamos -1 para representar blank
+                if (char === 'period') return -2; // Usamos -2 para representar period
+                return parseInt(char);
+            }
+
+            // Función auxiliar para convertir número de vuelta a char
+            numberToChar(num) {
+                if (num === -1 || num < 0) return 'blank';
+                if (num === -2) return 'period';
+                if (num > 9) return 'blank'; // Si se pasa de 9, vuelve a blank
+                return num.toString();
+            }
+
+            updateDisplay() {
+				if (!this.imagesLoaded) return;
+
+    			const now = new Date();
+    			const seconds = now.getSeconds();
+
+    			// Disparar efecto cuando segundos == 0 y no está corriendo animación
+    			if (seconds === 0 && !this.animating) {
+        			this.startRandomAnimation();
+        			return;
+    			}
+
+    			if (this.animating) return; // Bloquea refresco normal mientras animación
+
+    			const { pics, isPM } = this.formatTime();
+    			const images = this.container.children;
+
+    			// AM/PM indicator
+    			const ampmImg = images[0];
+    			if (this.showAMPM) {
+        			const key = isPM ? 'period' : 'blank';
+        			ampmImg.src = this.imageCache[key] || '';
+        			ampmImg.style.opacity = '1';
+    			} else {
+    			    ampmImg.style.opacity = '0';
+    			}
+
+    			// Time digits normales
+    			pics.forEach((digit, index) => {
+    			    const img = images[index + 1];
+    			    if (!img) return;
+    			    if (this.imageCache[digit]) {
+    			        img.src = this.imageCache[digit];
+    			        img.style.opacity = '1';
+    			    } else {
+    			        img.style.display = 'none';
+    			        if (!img.nextElementSibling || !img.nextElementSibling.classList.contains('digit-fallback')) {
+    			            const fallback = document.createElement('div');
+    			            fallback.className = 'digit-fallback';
+    			            fallback.textContent = digit === 'blank' ? '' : digit === 'period' ? ':' : digit;
+    			            img.parentNode.insertBefore(fallback, img.nextSibling);
+    			        }
+    			    }
+    			});
+			}
+
+			// Nueva función de animación con retorno orgánico
+			startRandomAnimation() {
+    			this.animating = true;
+    			const images = this.container.children;
+
+    			// Patrón fijo: 7 posiciones -> "x.xxxxx"
+    			const pattern = [ 'X', 'period', 'X', 'X', 'X', 'X', 'X' ];
+
+    			let elapsed = 0;
+				const intervalRolling = 40;      // 38ms para la animación inicial (rápida)
+				const intervalReturn = 125;      // 150ms para la animación de retorno (lenta)
+				const durationRolling = 2000;    // 2s animando
+				const durationStatic = 2000;     // 2s fijo
+				const durationReturn = 1500;    // 2s de animación de regreso orgánica
+
+    			const getRandomDigit = (first) => {
+    			    if (first) return String(Math.floor(Math.random() * 5) + 1); // 1–5
+    			    return String(Math.floor(Math.random() * 10));               // 0–9
+    			};
+
+                // Guardamos los valores actuales antes de empezar la animación
+                let currentValues = [];
+                let targetTime = null;
+
+    			// Animación inicial
+    			const roll = setInterval(() => {
+					elapsed += intervalRolling;  
+    			    pattern.forEach((ch, idx) => {
+    			        const img = images[idx + 1]; // +1 porque [0] es AM/PM
+    			        if (!img) return;
+
+    			        if (ch === 'period') {
+    			            img.src = this.imageCache['period'];
+    			            img.style.opacity = '1';
+    			        } else {
+    			            const digit = getRandomDigit(idx === 0);
+    			            img.src = this.imageCache[digit] || '';
+    			            img.style.opacity = '1';
+    			        }
+    			    });
+
+    			    if (elapsed >= durationRolling) {
+    			        clearInterval(roll);
+
+                        // Capturar los valores finales de la animación aleatoria
+                        currentValues = [];
+                        pattern.forEach((ch, idx) => {
+                            const img = images[idx + 1];
+                            if (ch === 'period') {
+                                currentValues.push('period');
+                            } else {
+                                // Obtener el último dígito aleatorio mostrado
+                                const digit = getRandomDigit(idx === 0);
+                                currentValues.push(digit);
+                            }
+                        });
+
+    			        // Mantener fijo por 2s
+    			        setTimeout(() => {
+                            // Obtener la hora objetivo al momento de iniciar el retorno
+                            const { pics: targetPics } = this.formatTime();
+                            targetTime = [...targetPics]; // Copia del array
+
+                            // Iniciar animación de regreso orgánica
+    			            let elapsedReturn = 0;
+                            const steps = Math.floor(durationReturn / intervalReturn);
+                            
+    			            const rollBack = setInterval(() => {
+    			                elapsedReturn += intervalReturn;
+                                const progress = elapsedReturn / durationReturn;
+
+                                // Para cada posición, interpolar hacia el valor objetivo
+                                currentValues.forEach((currentChar, idx) => {
+                                    const img = images[idx + 1];
+                                    if (!img) return;
+
+                                    const targetChar = targetTime[idx];
+                                    
+                                    if (currentChar === 'period' && targetChar === 'period') {
+                                        // Ambos son separadores, mantener
+                                        img.src = this.imageCache['period'];
+                                        img.style.opacity = '1';
+                                    } else {
+                                        // Convertir a números para interpolar
+                                        const currentNum = this.charToNumber(currentChar);
+                                        const targetNum = this.charToNumber(targetChar);
+                                        
+                                        if (currentNum === targetNum) {
+                                            // Ya están iguales, mostrar el valor
+                                            const displayChar = this.numberToChar(currentNum);
+                                            img.src = this.imageCache[displayChar] || '';
+                                            img.style.opacity = '1';
+                                        } else {
+                                            // Calcular el siguiente paso hacia el objetivo
+                                            let nextNum = currentNum;
+											const diff = targetNum - currentNum;
+											const stepSize = 1; // Cambio fijo a 1 para movimiento más lento
+                                            
+                                            if (diff > 0) {
+                                                nextNum = Math.min(currentNum + stepSize, targetNum);
+                                            } else if (diff < 0) {
+                                                nextNum = Math.max(currentNum - stepSize, targetNum);
+                                            }
+                                            
+                                            // Actualizar el valor actual para el siguiente frame
+                                            currentValues[idx] = this.numberToChar(nextNum);
+                                            
+                                            // Mostrar el valor interpolado
+                                            const displayChar = this.numberToChar(nextNum);
+                                            img.src = this.imageCache[displayChar] || '';
+                                            img.style.opacity = '1';
+                                        }
+                                    }
+                                });
+								
+								if (elapsedReturn >= durationReturn) {
+    			                    clearInterval(rollBack);
+    			                    this.animating = false;
+    			                    this.updateDisplay(); // vuelve al reloj normal para asegurar precisión
+    			                }
+    			                
+    			            }, intervalReturn);
+    			        }, durationStatic);
+    			    }
+    			}, intervalRolling);
+			}
+
+            startClock() {
+                this.updateDisplay();
+                setInterval(() => this.updateDisplay(), 1000);
+            }
+
+            setBackground(type, value) {
+                if (type === 'color') {
+                    document.body.style.background = value;
+                    document.body.style.backgroundImage = 'none';
+                } else if (type === 'image') {
+                    document.body.style.background = `url('${value}') no-repeat center center`;
+                    document.body.style.backgroundSize = 'cover';
+                }
+            }
+        }
+
+        let clock;
+        window.addEventListener('load', () => { clock = new ImageClock(); });
+
+        function livelyPropertyListener(name, val) {
+            if (!clock) return;
+            switch(name) {
+                case "bgColor":
+                    clock.bgColor = val;
+                    if (!clock.imgChecked) clock.setBackground('color', val);
+                    break;
+                case "imgSelect":
+                    clock.bgImage = val;
+                    if (clock.imgChecked) {
+                        const imagePath = val.replace(/\\/g, '/');
+                        clock.setBackground('image', `../${imagePath}`);
+                    }
+                    break;
+                case "imageChk":
+                    clock.imgChecked = val;
+                    if (val) {
+                        const imagePath = clock.bgImage.replace(/\\/g, '/');
+                        clock.setBackground('image', `../${imagePath}`);
+                    } else {
+                        clock.setBackground('color', clock.bgColor);
+                    }
+                    break;
+                case "showAMPM":
+                    clock.showAMPM = val;
+                    clock.updateDisplay();
+                    break;
+            }
+        }
+    </script>
+</body>
+</html>
